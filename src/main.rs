@@ -4,8 +4,16 @@ pub mod turing;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() == 1 {
+        println!("Please type a command.");
+        return;
+    }
     match args[1].as_str() {
         "compute" => {
+            if args.len() < 4 {
+                eprintln!("Too few arguments! Expected usage: compute [MACHINEPATH] [INPUT]");
+                return;
+            }
             let filepath = &args[2];
             let input = args[3].clone();
             let turing = TuringMachine::from_file(filepath).input(input);
@@ -13,28 +21,15 @@ fn main() {
                 println!("{}", tmove);
             }
         }
-        "combine" => {
-            let (m1, m2, out) = (args[2].as_str(), args[3].as_str(), args[4].as_str());
-            turing::combine_machines(m1, m2, out);
-        }
-        "add" => {
-            let n: u16 = args[2].parse().unwrap();
-            let name = format!("machines/add{}.tur", n);
-            let add_m = "machines/add_one.tur";
-            turing::combine_machines(
-                add_m, 
-                add_m, 
-                &name,
-            );
-            for _ in 0..n - 2 {
-                turing::combine_machines(
-                    name.as_str(), 
-                    add_m, 
-                    name.as_str()
-                );
+        "chain" => {
+            if args.len() < 5 {
+                eprintln!("Expected 3 filepaths, but found {}.", args.len() - 2);
+                return;
             }
+            let (m1, m2, out) = (args[2].as_str(), args[3].as_str(), args[4].as_str());
+            turing::chain(m1, m2, out);
         }
-        _ => println!("Error: Not a valid command."),
+        _ => eprintln!("Error: Not a valid command."),
     }
     
 }

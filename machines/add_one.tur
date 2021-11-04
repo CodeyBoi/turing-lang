@@ -1,0 +1,9 @@
+# can overflow
+states a
+syms 0 1
+initstate a
+finalstates HALT
+table
+a 0 HALT 1 N
+a 1 a 0 L
+a _ HALT _ R

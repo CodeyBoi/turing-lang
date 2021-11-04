@@ -1,0 +1,9 @@
+# can underflow
+states a
+syms 0 1
+initstate a
+finalstates HALT
+table
+a 1 HALT 0 N
+a 0 a 1 L
+a _ HALT _ R

@@ -1,0 +1,10 @@
+# copies a bit and writes it to the left
+states a b c
+syms _ 0 1
+initstate a
+finalstates HALT 
+table 
+a 0 b . L
+a 1 c . L
+b * HALT 0 R
+c * HALT 1 R

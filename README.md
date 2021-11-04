@@ -1,0 +1,5 @@
+D NAND
+! NOT 
+& AND
+| OR 
+: GENERIC OPERATION

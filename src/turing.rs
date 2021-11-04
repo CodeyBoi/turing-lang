@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, error::{self, Error}, fmt::{Display, Write as _}, fs::File, io::{Read, Write as _}, path::Path};
+use std::{collections::{HashMap, HashSet}, fmt::{Write as _}, fs::File, io::{Read, Write as _}, path::Path};
 
 use fasthash::spooky::Hash128;
 
@@ -190,6 +190,9 @@ impl TuringRules {
         let mut transition_map = HashMap::with_hasher(Hash128);
 
         for line in table.lines() {
+            if line.is_empty() {
+                continue;
+            }
             let tokens: Vec<&str> = line.split_whitespace().collect();
             if tokens.len() != 5 {
                 panic!("Transition table had an entry with {} tokens, \
@@ -293,12 +296,13 @@ impl TuringRules {
 
 /// Makes a new machine at `outpath`, which takes the output from the 
 /// machine at `filepath1` as input to the machine at `filepath2`.
-pub fn chain<P: AsRef<Path>>(filepath1: P, filepath2: P, outpath: P) {
+pub fn chain<P, T, L>(filepath1: P, filepath2: T, outpath: L) 
+    where P: AsRef<Path>, T: AsRef<Path>, L: AsRef<Path>
+{
     
     let m2_prefix = filepath2.as_ref().to_str().unwrap()
         .split("/").last().unwrap()
-        .split_once(".tu").unwrap().0
-        .to_owned();
+        .trim_end_matches(".tur").to_owned();
 
     let (
         mut states, 
@@ -317,7 +321,6 @@ pub fn chain<P: AsRef<Path>>(filepath1: P, filepath2: P, outpath: P) {
     ) = extract_tokens(&filepath2);
 
     let mut output = File::create(&outpath).unwrap();
-
 
     while states.contains(&m2_init) {
         m2_init = format!("{}::{}", m2_prefix, m2_init);
@@ -359,9 +362,91 @@ pub fn chain<P: AsRef<Path>>(filepath1: P, filepath2: P, outpath: P) {
     }
 
     write!(output, "finalstates {}\n", m2_final.join(" ")).unwrap();
-    write!(output, "table\n{}{}", m1_table, m2_table).unwrap();
+    write!(output, "table\n{}\n{}", m1_table, m2_table).unwrap();
 
     println!("Wrote new turing machine to '{}'.", outpath.as_ref().to_str().unwrap());
+}
+
+pub fn branch<P, T, L>(
+    entry: P, 
+    syms: &[String], 
+    machines: &[T],
+    outpath: L
+) where P: AsRef<Path>, T: AsRef<Path>, L: AsRef<Path> {
+
+    let (
+        mut out_states, 
+        mut out_syms, 
+        _, 
+        init_state, 
+        mut out_table,
+    ) = extract_tokens(&entry);
+
+    out_table = out_table.replace("HALT", "BRANCH");
+    out_states.push("BRANCH".to_owned());
+
+    let mut init_states = Vec::with_capacity(syms.len());
+
+    for path in machines {
+        let prefix = path.as_ref().to_str().unwrap()
+            .split("/").last().unwrap()
+            .trim_end_matches(".tur").to_owned();
+        
+        let machine = extract_tokens(path);
+        let mut current_init_state = machine.3.to_owned();
+        while out_states.contains(&current_init_state) {
+            current_init_state = format!("{}::{}", prefix, current_init_state);
+        }
+        init_states.push(current_init_state);
+        let table = merge_tokens(&mut out_states, &mut out_syms, machine, prefix);
+
+        out_table.push_str(&table);
+    }
+
+    let mut out = File::create(&outpath)
+        .expect("Failed when writing branching machine to file.");
+
+    write!(out, "states {}\n", out_states.join(" ")).unwrap();
+    write!(out, "syms {}\n", out_syms.join(" ")).unwrap();
+    write!(out, "initstate {}\n", init_state).unwrap();
+    write!(out, "finalstates HALT\n").unwrap();
+    write!(out, "table\n{}", out_table).unwrap();
+
+
+    for (sym, init_state) in syms.iter().zip(&init_states) {
+        write!(out, "BRANCH {} {} . R\n", sym, init_state).unwrap();
+    }
+
+    println!("Wrote new branching machine to '{}'.", outpath.as_ref().to_str().unwrap());
+}
+
+pub fn loop_while<P: AsRef<Path>>(entry: P, loop_syms: &[String]) {
+
+}
+
+fn merge_tokens<T>(
+    states: &mut Vec<String>, syms: &mut Vec<String>,
+    m2: (Vec<String>, Vec<String>, T, String, String), 
+    prefix: String,
+) -> String {
+    let mut table = m2.4.to_owned();
+    for state in m2.0 {
+        let mut s = state.clone();
+        while states.contains(&s) {
+            s = format!("{}::{}", prefix, s);
+        }
+        // Replace all instances of the state in the table 
+        // to the new state name.
+        table = table.replace(&state, &s);
+        states.push(s);
+    }
+
+    for sym in m2.1 {
+        if !syms.contains(&sym) {
+            syms.push(sym);
+        }
+    }
+    table
 }
 
 /// Returns tokens in the order:
@@ -380,7 +465,7 @@ fn extract_tokens<P: AsRef<Path>>(path: P) -> (
     let mut machine = String::new();
     File::open(&path)
         .expect(&format!("Failed when opening file at '{}'.", 
-            path.as_ref().to_str().expect("Failed to parse path as string."))
+        path.as_ref().to_str().expect("Failed to parse path as string."))
         ).read_to_string(&mut machine)
         .expect("Failed when reading file to string.");
 
@@ -435,9 +520,9 @@ fn extract_tokens<P: AsRef<Path>>(path: P) -> (
         table.push_str(&format!("{}\n", line));
     }
 
-    (states, syms, final_states, initial_state, table)
+    (states, syms, final_states, initial_state, table.trim_end().to_owned())
 }
 
-pub fn clean_machine<P: AsRef<Path>>(filepath: P, output_path: P) {
-    todo!();
-}
+// pub fn clean_machine<P: AsRef<Path>>(filepath: P, output_path: P) {
+//     todo!();
+// }

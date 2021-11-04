@@ -1,0 +1,16 @@
+# goes right until we find an operation symbol
+# this will be used to conditionally invoke other machines 
+# (by jumping to another machine based on what symbol is under the tape)
+# halts on an operator symbol if there is one, or on a blank otherwise
+states init op_exists goto_op
+syms 0 1
+initstate init
+finalstates HALT 
+table
+init _ HALT . N 
+init 0,1 . . L
+init * op_exists . L 
+op_exists _ goto_op . R
+op_exists * . . L 
+goto_op 0,1 . . R 
+goto_op * HALT . N

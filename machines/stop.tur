@@ -1,0 +1,5 @@
+states
+syms
+initstate HALT
+finalstates HALT 
+table 

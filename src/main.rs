@@ -29,7 +29,21 @@ fn main() {
             let (m1, m2, out) = (args[2].as_str(), args[3].as_str(), args[4].as_str());
             turing::chain(m1, m2, out);
         }
-        _ => eprintln!("Error: Not a valid command."),
+        "branch" => {
+            if args.len() < 6 {
+                eprintln!("Too few arguments! Expected usage: \
+                    branch [ENTRYPOINT] [SYMS] [MACHINE_PATHS] [OUTPATH]");
+                return;
+            }
+            let entry = &args[2];
+            let syms: Vec<String> = args[3].split_whitespace()
+                .map(|s| s.to_owned()).collect();
+            let machines: Vec<String> = args[4].split_whitespace()
+                .map(|s| s.to_owned()).collect();
+            let outpath = &args[5];
+            turing::branch(entry, &syms, &machines, outpath)
+        }
+        _ => eprintln!("Error: '{}' is not a valid command.", args[1]),
     }
     
 }

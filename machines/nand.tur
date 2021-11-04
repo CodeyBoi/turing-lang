@@ -1,10 +1,10 @@
 # a is init, c is guaranteed true, and b is maybe false
 states a b c 
-syms 0 1 : 
+syms 0 1 D
 initstate a
 finalstates HALT 
 table
-* : . _ L       # makes all states remove : and move left
+a-c D . _ L
 a 0 c _ L
 a 1 b _ L
 b 0 HALT 1 N

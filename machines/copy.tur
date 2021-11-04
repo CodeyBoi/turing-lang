@@ -1,6 +1,6 @@
 # copies a bit and writes it to the left
 states a b c
-syms _ 0 1
+syms 0 1
 initstate a
 finalstates HALT 
 table 

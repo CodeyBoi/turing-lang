@@ -1,9 +1,9 @@
 states a b c not::a
-syms 0 1 :
+syms 0 1 &
 initstate a
 finalstates HALT
 table
-* : . _ L       
+a-not::a & . _ L
 a 0 c _ L
 a 1 b _ L
 b 0 not::a 1 N

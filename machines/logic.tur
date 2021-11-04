@@ -1,0 +1,29 @@
+states init op_exists goto_op BRANCH a b c not::a nand::a nand::b nand::c
+syms 0 1 & D
+initstate init
+finalstates HALT
+table
+init _ BRANCH . N 
+init 0,1 . . L
+init * op_exists . L 
+op_exists _ goto_op . R
+op_exists * . . L 
+goto_op 0,1 . . R 
+goto_op * BRANCH . N
+a-not::a & . _ L
+a 0 c _ L
+a 1 b _ L
+b 0 not::a 1 N
+b 1 not::a 0 N
+c 0-1 not::a 1 N
+not::a 0 HALT 1 N
+not::a 1 HALT 0 N
+nand::a-nand::c D . _ L
+nand::a 0 nand::c _ L
+nand::a 1 nand::b _ L
+nand::b 0 HALT 1 N
+nand::b 1 HALT 0 N
+nand::c 0-1 HALT 1 N
+BRANCH & a . R
+BRANCH D nand::a . R
+BRANCH _ HALT . R

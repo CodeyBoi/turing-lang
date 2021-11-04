@@ -1,4 +1,5 @@
-# can overflow
+# adds one to tape contents if parsed as a binary number
+# will overflow, as in input tape '1111' will give output '0000'
 states a
 syms 0 1
 initstate a
@@ -6,4 +7,4 @@ finalstates HALT
 table
 a 0 HALT 1 N
 a 1 a 0 L
-a _ HALT _ R
+a _ HALT . R

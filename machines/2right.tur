@@ -1,0 +1,7 @@
+states a right::a
+syms 
+initstate a
+finalstates HALT
+table
+a * right::a . R
+right::a * HALT . R

@@ -1,0 +1,10 @@
+states a b c
+syms 0 1 | 
+initstate a
+finalstates HALT
+table
+a-c | . _ L
+a 1 c _ L 
+a 0 b _ L
+b 0-1 HALT . N
+c 0-1 HALT 1 N

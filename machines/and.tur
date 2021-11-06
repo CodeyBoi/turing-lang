@@ -3,7 +3,7 @@ syms 0 1 &
 initstate a
 finalstates HALT
 table
-a-not::a & . _ L
+a-c & . _ L
 a 0 c _ L
 a 1 b _ L
 b 0 not::a 1 N

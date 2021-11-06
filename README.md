@@ -57,7 +57,7 @@ turing branch [ENTRY_MACHINE] [BRANCH_SYMS] [BRANCH_MACHINES] [OUTPUT]
 ```
 The argument `ENTRY_MACHINE` is the machine which is used as the entry point for the entire program. When `ENTRY_MACHINE` halts the symbol under the pointer is read. This symbol determines which machine should be chained next. The arguments `BRANCH_SYMS` and `BRANCH_MACHINES` are two strings, where `BRANCH_SYMS` are all relevant symbols separated by a space, and `BRANCH_MACHINES` are each corresponding machine, also each separated by a space. The resulting .tur file is then written to `OUTPUT`.
 
-That was a mouthful! Let's go though an example usage. Assume we have the files `nand.tur`, `and.tur` and `stop.tur` which performs the operations NAND and AND. The machine `stop.tur` simply halts. We also have the machine `find_op.tur` which will find the left-most operator symbol and then halt on top of it. We can now create a branching machine via the command
+That was a mouthful! Let's go though an example usage. Assume we have the files `nand.tur` and `and.tur` which performs the operations NAND and AND. We also have the machine `find_op.tur` which will find the left-most operator symbol and then halt on top of it. We can now create a branching machine via the command
 ```
 turing branch next_op.tur '& D _' 'and.tur nand.tur stop.tur' logic.tur
 ```

@@ -43,6 +43,18 @@ fn main() {
             let outpath = &args[5];
             turing::branch(entry, &syms, &machines, outpath)
         }
+        "loop" => {
+            if args.len() < 5 {
+                eprintln!("Too few arguments! Expected usage: \
+                    loop [ENTRYPOINT] [SYMS] [OUTPATH]");
+                return;
+            }
+            let entry = &args[2];
+            let loop_syms: Vec<String> = args[3].split_whitespace()
+                .map(|s| s.to_owned()).collect();
+            let outpath = &args[4];
+            turing::loop_while(entry, &loop_syms, outpath);
+        }
         _ => eprintln!("Error: '{}' is not a valid command.", args[1]),
     }
     

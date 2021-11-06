@@ -1,8 +1,9 @@
-# flips current bit and halts
-states a 
-syms 0 1
+states a b
+syms 0 1 !
 initstate a
 finalstates HALT
 table
-a 0 HALT 1 N
-a 1 HALT 0 N
+a 0 a _ L
+a 1 b _ L
+a ! HALT 1 N 
+b ! HALT 0 N

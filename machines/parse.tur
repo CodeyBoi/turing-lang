@@ -1,8 +1,12 @@
-states init op_exists goto_op BRANCH a b c not::a nand::a nand::b nand::c or::a or::b or::c not::not::a not::b
-syms 0 1 & D | !
-initstate init
+states find_start find_end init op_exists goto_op BRANCH a b c not::a nand::a nand::b nand::c or::a or::b or::c not::not::a not::b
+syms 0 1 ( ) & D | !
+initstate find_start
 finalstates HALT
 table
+find_start ( find_end _ R 
+find_start * . . L 
+find_end ) init _ L 
+find_end * . . R
 init _ BRANCH . N 
 init 0,1 . . L
 init * op_exists . L 

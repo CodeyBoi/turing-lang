@@ -364,7 +364,7 @@ pub fn chain<P, T, L>(filepath1: P, filepath2: T, outpath: L)
     write!(output, "finalstates {}\n", m2_final.join(" ")).unwrap();
     write!(output, "table\n{}\n{}", m1_table, m2_table).unwrap();
 
-    println!("Wrote new turing machine to '{}'.", outpath.as_ref().to_str().unwrap());
+    println!("Wrote machine to '{}'.", outpath.as_ref().to_str().unwrap());
 }
 
 pub fn branch<P, T, L>(
@@ -393,51 +393,61 @@ pub fn branch<P, T, L>(
             .trim_end_matches(".tur").to_owned();
         
         let machine = extract_tokens(path);
-        let mut current_init_state = machine.3.to_owned();
-        while out_states.contains(&current_init_state) {
-            current_init_state = format!("{}::{}", prefix, current_init_state);
-        }
-        init_states.push(current_init_state);
-        let table = merge_tokens(&mut out_states, &mut out_syms, machine, prefix);
+        let (table, init_state) = merge_tokens(&mut out_states, &mut out_syms, machine, prefix);
 
-        out_table.push_str(&table);
+        init_states.push(init_state);
+        out_table.push_str(&format!("\n{}", table));
     }
-
-    let mut out = File::create(&outpath)
-        .expect("Failed when writing branching machine to file.");
-
-    write!(out, "states {}\n", out_states.join(" ")).unwrap();
-    write!(out, "syms {}\n", out_syms.join(" ")).unwrap();
-    write!(out, "initstate {}\n", init_state).unwrap();
-    write!(out, "finalstates HALT\n").unwrap();
-    write!(out, "table\n{}", out_table).unwrap();
-
 
     for (sym, init_state) in syms.iter().zip(&init_states) {
-        write!(out, "BRANCH {} {} . R\n", sym, init_state).unwrap();
+        out_table.push_str(&format!("BRANCH {} {} . R\n", sym, init_state));
     }
 
-    println!("Wrote new branching machine to '{}'.", outpath.as_ref().to_str().unwrap());
+    write_to_file(outpath, out_states, out_syms, init_state, out_table);
 }
 
-pub fn loop_while<P: AsRef<Path>>(entry: P, loop_syms: &[String]) {
+pub fn loop_while<P: AsRef<Path>, L: AsRef<Path>>(
+    entry: P, 
+    loop_syms: &[String],
+    outpath: L
+) {
+    let (
+        mut states, 
+        syms, 
+        _, 
+        init_state, 
+        table,
+    ) = extract_tokens(&entry);
 
+    states.push("CHECK".to_owned());
+
+    let mut table = table.replace("HALT", "CHECK");
+    table.push_str(&format!("\nCHECK {} {} . N", loop_syms.join(","), init_state));
+    table.push_str(&format!("\nCHECK * HALT . N"));
+
+    write_to_file(outpath, states, syms, init_state, table)
 }
 
 fn merge_tokens<T>(
     states: &mut Vec<String>, syms: &mut Vec<String>,
     m2: (Vec<String>, Vec<String>, T, String, String), 
     prefix: String,
-) -> String {
+) -> (String, String) {
     let mut table = m2.4.to_owned();
+    let mut init_state = m2.3.to_owned();
     for state in m2.0 {
         let mut s = state.clone();
         while states.contains(&s) {
+            if s == init_state {
+                init_state = format!("{}::{}", prefix, init_state);
+            }
             s = format!("{}::{}", prefix, s);
         }
         // Replace all instances of the state in the table 
         // to the new state name.
-        table = table.replace(&state, &s);
+        table = table.replace(&format!("{} ", state), &format!("{} ", s));
+        table = table.replace(&format!("{},", state), &format!("{},", s));
+        table = table.replace(&format!("{}-", state), &format!("{}-", s));
         states.push(s);
     }
 
@@ -446,7 +456,26 @@ fn merge_tokens<T>(
             syms.push(sym);
         }
     }
-    table
+    (table, init_state)
+}
+
+fn write_to_file<P: AsRef<Path>>(
+    path: P,
+    states: Vec<String>,
+    syms: Vec<String>,
+    init_state: String,
+    table: String,
+) {
+    let mut out = File::create(&path)
+        .expect("Failed when creating file for machine.");
+
+    write!(out, "states {}\n", states.join(" ")).unwrap();
+    write!(out, "syms {}\n", syms.join(" ")).unwrap();
+    write!(out, "initstate {}\n", init_state).unwrap();
+    write!(out, "finalstates HALT\n").unwrap();
+    write!(out, "table\n{}", table).unwrap();
+
+    println!("Wrote machine to '{}'.", path.as_ref().to_str().unwrap());
 }
 
 /// Returns tokens in the order:

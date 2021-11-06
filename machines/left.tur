@@ -1,0 +1,6 @@
+states a
+syms
+initstate a 
+finalstates HALT 
+table 
+a * HALT . L

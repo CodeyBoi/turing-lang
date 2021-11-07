@@ -1,22 +1,24 @@
 # copies the current symbol and moves it to the left
-states init q0 q1 q_ qD q& q| q! q^
-syms 0 1 _ D & | ! ^
+states init q0 q1 q2 q3 q4 q5 q6 q7 q8
+syms _ 0 1 D & | ! ^ "
 initstate init
 finalstates HALT
 table
-init 0 q0 . L
-q0 * HALT 0 R
-init 1 q1 . L
-q1 * HALT 1 R
-init _ q_ . L
-q_ * HALT _ R
-init D qD . L
-qD * HALT D R
-init & q& . L
-q& * HALT & R
-init | q| . L
-q| * HALT | R
-init ! q! . L
-q! * HALT ! R
-init ^ q^ . L
-q^ * HALT ^ R
+init _ q0 . L
+q0 * HALT _ R
+init 0 q1 . L
+q1 * HALT 0 R
+init 1 q2 . L
+q2 * HALT 1 R
+init D q3 . L
+q3 * HALT D R
+init & q4 . L
+q4 * HALT & R
+init | q5 . L
+q5 * HALT | R
+init ! q6 . L
+q6 * HALT ! R
+init ^ q7 . L
+q7 * HALT ^ R
+init " q8 . L
+q8 * HALT " R

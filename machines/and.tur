@@ -1,13 +1,10 @@
-states a b c not::a
-syms 0 1 &
-initstate a
-finalstates HALT
-table
+states a b c 
+syms 0 1 & 
+initstate a 
+finalstates HALT 
+table 
 a-c & . _ L
-a 0 c _ L
+a 0 c _ L 
 a 1 b _ L
-b 0 not::a 1 N
-b 1 not::a 0 N
-c 0-1 not::a 1 N
-not::a 0 HALT 1 N
-not::a 1 HALT 0 N
+b 0,1 HALT . N 
+c 0,1 HALT 0 N   

@@ -1,11 +1,14 @@
-use std::{collections::{HashMap, HashSet}, fmt::{Write as _}, fs::File, io::{Read, Write as _}, path::Path};
+use std::{collections::{HashMap, HashSet}, fmt::{Write as _}, fs::File, io::{Read, Write as _}, ops::RangeBounds, path::Path};
 
 use fasthash::spooky::Hash128;
+use rand::{Rng, distributions::Uniform};
+use regex::{Captures, Regex};
 
 const WILDCARD:         &'static str = "*";
 const NO_STATE_CHANGE:  &'static str = ".";
 const NO_WRITE:         &'static str = ".";
 const BLANK:            &'static str = "_";
+const STATE_DELIMITER:  &'static str = r"([,\-\s])";
 const BLANK_ID: usize = 0;
 
 pub struct TuringMachine {
@@ -78,7 +81,7 @@ impl Iterator for TuringMachine {
                 _ => {},
             }
         } else {
-            if self.rules.final_states.contains(&self.state) {
+            if self.state == 0 {
                 tape.push_str("\n    ACCEPTED");
             } else {
                 tape.push_str("\n    REJECTED");
@@ -100,7 +103,6 @@ struct TuringRules {
     // What state the machine is initially in
     pub initial_state: usize,
     // The set of states which are 'accepted' if the machine halts in them
-    pub final_states: HashSet<usize, Hash128>,
     pub idx2sym: HashMap<usize, String, Hash128>,
     pub sym2idx: HashMap<String, usize, Hash128>,
     // A hashmap describing what to do when you are in state s with head read r for (s, r).
@@ -138,14 +140,9 @@ impl TuringRules {
 
     fn parse_file<P: AsRef<Path>>(path: P) -> Self {
 
-        let machine_name = path.as_ref().to_str().unwrap()
-            .split("/").last().unwrap()
-            .trim_end_matches(".tur").to_owned();
-
         let (
             state_names, 
             sym_names, 
-            final_state_names, 
             initial_state_name, 
             table,
         ) = extract_tokens(&path);
@@ -154,10 +151,9 @@ impl TuringRules {
         let mut state2idx = HashMap::with_hasher(Hash128);
 
         // The HALT state is always defined with index 0
-        state2idx.insert(format!("{}::HALT", machine_name), 0);
-
+        state2idx.insert("HALT".to_string(), 0);
         for (i, state) in state_names.iter().enumerate() {
-            state2idx.insert(format!("{}::{}", machine_name, state), i + 1);
+            state2idx.insert(state.to_string(), i + 1);
         }
 
         // Symbol parsing starts here
@@ -173,18 +169,10 @@ impl TuringRules {
             idx2sym.insert(i + 1, sym.to_owned());
         }
 
-        // Defining initial_state and final_states
-        let initial_state = *state2idx.get(&format!("{}::{}", machine_name, initial_state_name))
+        // Defining initial_state
+        let initial_state = *state2idx.get(&initial_state_name)
             .expect(&format!("Initial state '{}' was not defined \
             with a 'states' command.", initial_state_name));
-
-        let mut final_states = HashSet::with_hasher(Hash128);
-        for state_name in &final_state_names {
-            let hash = format!("{}::{}", machine_name, state_name);
-            final_states.insert(*state2idx.get(&hash)
-                .expect(&format!("Final state '{}' was not defined \
-                with a 'states' command", state_name)));
-        }
 
         // Transition table parsing starts here!
         let mut transition_map = HashMap::with_hasher(Hash128);
@@ -204,22 +192,16 @@ impl TuringRules {
                 let first;
                 let last;
                 if let Some((s1, s2)) = s.split_once("-") {
-                    let statename1 = format!("{}::{}", machine_name, s1);
-                    let statename2 = format!("{}::{}", machine_name, s2);
-                    first = *state2idx.get(&statename1)
+                    first = *state2idx.get(s1)
                         .expect(&format!("State '{}' has not been defined.", s1));
-                    last = *state2idx.get(&statename2)
+                    last = *state2idx.get(s2)
                         .expect(&format!("State '{}' has not been defined.", s2));
                     if first > last {
                         panic!("State '{}' was defined before state '{}', \
                             did you put them in the wrong order?", s2, s1);
                     }
-                } else if tokens[0] == WILDCARD {
-                    first = 0;
-                    last = state2idx.len() - 1;
                 } else {
-                    let statename = format!("{}::{}", machine_name, s);
-                    first = *state2idx.get(&statename)
+                    first = *state2idx.get(s)
                         .expect(&format!("State '{}' has not been defined", s));
                     last = first;
                 }
@@ -257,12 +239,14 @@ impl TuringRules {
             let new_state = if tokens[2].ends_with(NO_STATE_CHANGE) {
                 None
             } else {
-                Some(*state2idx.get(&format!("{}::{}", machine_name, tokens[2])).unwrap())
+                Some(*state2idx.get(tokens[2])
+                    .expect(&format!("State '{}' has not been defined.", tokens[2])))
             };
             let write =  if tokens[3].ends_with(NO_WRITE) {
                 None
             } else {
-                Some(*sym2idx.get(tokens[3]).unwrap())
+                Some(*sym2idx.get(tokens[3])
+                    .expect(&format!("Symbol '{}' has not been defined.", tokens[3])))
             };
             let d = Direction::from(tokens[4]);
             for state_idx in &states {
@@ -286,7 +270,6 @@ impl TuringRules {
 
         Self {
             initial_state,
-            final_states,
             idx2sym,
             sym2idx,
             transition_map,
@@ -295,115 +278,95 @@ impl TuringRules {
 }
 
 /// Makes a new machine at `outpath`, which takes the output from the 
-/// machine at `filepath1` as input to the machine at `filepath2`.
-pub fn chain<P, T, L>(filepath1: P, filepath2: T, outpath: L) 
+/// machine at `machine1` as input to the machine at `machine2`.
+pub fn chain<P, T, L>(machine1: P, machines: &[T], outpath: L) 
     where P: AsRef<Path>, T: AsRef<Path>, L: AsRef<Path>
 {
-    
-    let m2_prefix = filepath2.as_ref().to_str().unwrap()
-        .split("/").last().unwrap()
-        .trim_end_matches(".tur").to_owned();
-
     let (
         mut states, 
         mut syms, 
-        _, 
-        m1_init, 
-        m1_table,
-    ) = extract_tokens(&filepath1);
+        init_state, 
+        mut table,
+    ) = extract_tokens(&machine1);
 
-    let (
-        m2_states, 
-        m2_syms, 
-        m2_final, 
-        mut m2_init, 
-        mut m2_table,
-    ) = extract_tokens(&filepath2);
+    for path in machines {
+        let (
+            states2, 
+            syms2, 
+            init_state2, 
+            table2,
+        ) = extract_tokens(&path);
 
-    let mut output = File::create(&outpath).unwrap();
-
-    while states.contains(&m2_init) {
-        m2_init = format!("{}::{}", m2_prefix, m2_init);
-    }
-
-    // Add all m2 states to m1. If there is a name clash prepend 
-    // the name of m2 to the state name until there is no clash.
-    for state in m2_states {
-        let mut s = state.clone();
-        while states.contains(&s) {
-            s = format!("{}::{}", m2_prefix, s);
+        for state in states2 {
+            states.push(state);
         }
-        // Replace all instances of the state in the table 
-        // to the new state name.
-        m2_table = m2_table.replace(&state, &s);
-        states.push(s);
-    }
 
-    // Change all HALTs in m1 to m2, so that m2 starts when m1 is done.
-    let m1_table = m1_table.replace("HALT", &m2_init);
+        table = table.replace("HALT", &init_state2);
 
-    write!(output, "states {}\n", states.join(" ")).unwrap();
-
-    // This would probably be better as a Set, but then ordering may be messed up
-    for sym in m2_syms {
-        if !syms.contains(&sym) {
-            syms.push(sym);
+        for sym in syms2 {
+            if !syms.contains(&sym) {
+                syms.push(sym);
+            }
         }
+
+        table = format!("{}\n{}", table, table2);
     }
 
-    write!(output, "syms {}\n", syms.join(" ")).unwrap();
-    write!(output, "initstate {}\n", m1_init).unwrap();
-
-    let mut m2_final: Vec<String> = m2_final.into_iter().collect();
-    for f in &mut m2_final {
-        if f.ends_with("HALT") {
-            *f = "HALT".to_owned();
-        }
-    }
-
-    write!(output, "finalstates {}\n", m2_final.join(" ")).unwrap();
-    write!(output, "table\n{}\n{}", m1_table, m2_table).unwrap();
-
-    println!("Wrote machine to '{}'.", outpath.as_ref().to_str().unwrap());
+    write_to_file(outpath, states, syms, init_state, table);
 }
 
 pub fn branch<P, T, L>(
     entry: P, 
-    syms: &[String], 
+    branch_syms: &[String], 
     machines: &[T],
     outpath: L
 ) where P: AsRef<Path>, T: AsRef<Path>, L: AsRef<Path> {
 
     let (
-        mut out_states, 
-        mut out_syms, 
-        _, 
+        mut states, 
+        mut syms, 
         init_state, 
-        mut out_table,
+        mut table,
     ) = extract_tokens(&entry);
 
-    out_table = out_table.replace("HALT", "BRANCH");
-    out_states.push("BRANCH".to_owned());
+    table = table.replace("HALT", "BRANCH");
+    states.push("BRANCH".to_string());
 
     let mut init_states = Vec::with_capacity(syms.len());
 
+    for sym in branch_syms {
+        if !syms.contains(&sym) {
+            syms.push(sym.to_string());
+        }
+    }
+
     for path in machines {
-        let prefix = path.as_ref().to_str().unwrap()
-            .split("/").last().unwrap()
-            .trim_end_matches(".tur").to_owned();
-        
-        let machine = extract_tokens(path);
-        let (table, init_state) = merge_tokens(&mut out_states, &mut out_syms, machine, prefix);
+        let (
+            cur_states,
+            cur_syms,
+            cur_init_state,
+            cur_table,
+        ) = extract_tokens(path);
 
-        init_states.push(init_state);
-        out_table.push_str(&format!("\n{}", table));
+        for state in cur_states {
+            states.push(state);
+        }
+
+        for sym in cur_syms {
+            if !syms.contains(&sym) {
+                syms.push(sym);
+            }
+        }
+
+        init_states.push(cur_init_state);
+        table.push_str(&format!("\n{}", cur_table));
     }
 
-    for (sym, init_state) in syms.iter().zip(&init_states) {
-        out_table.push_str(&format!("BRANCH {} {} . R\n", sym, init_state));
+    for (sym, machine_init_state) in branch_syms.iter().zip(&init_states) {
+        table.push_str(&format!("BRANCH {} {} . R\n", sym, machine_init_state));
     }
 
-    write_to_file(outpath, out_states, out_syms, init_state, out_table);
+    write_to_file(outpath, states, syms, init_state, table);
 }
 
 pub fn loop_while<P: AsRef<Path>, L: AsRef<Path>>(
@@ -413,13 +376,18 @@ pub fn loop_while<P: AsRef<Path>, L: AsRef<Path>>(
 ) {
     let (
         mut states, 
-        syms, 
-        _, 
+        mut syms, 
         init_state, 
         table,
     ) = extract_tokens(&entry);
 
     states.push("CHECK".to_owned());
+
+    for sym in loop_syms {
+        if !syms.contains(&sym) {
+            syms.push(sym.to_string());
+        }
+    }
 
     let mut table = table.replace("HALT", "CHECK");
     table.push_str(&format!("\nCHECK {} {} . N", loop_syms.join(","), init_state));
@@ -428,52 +396,37 @@ pub fn loop_while<P: AsRef<Path>, L: AsRef<Path>>(
     write_to_file(outpath, states, syms, init_state, table)
 }
 
-fn merge_tokens<T>(
-    states: &mut Vec<String>, syms: &mut Vec<String>,
-    m2: (Vec<String>, Vec<String>, T, String, String), 
-    prefix: String,
-) -> (String, String) {
-    let mut table = m2.4.to_owned();
-    let mut init_state = m2.3.to_owned();
-    for state in m2.0 {
-        let mut s = state.clone();
-        while states.contains(&s) {
-            if s == init_state {
-                init_state = format!("{}::{}", prefix, init_state);
-            }
-            s = format!("{}::{}", prefix, s);
-        }
-        // Replace all instances of the state in the table 
-        // to the new state name.
-        table = table.replace(&format!("{} ", state), &format!("{} ", s));
-        table = table.replace(&format!("{},", state), &format!("{},", s));
-        table = table.replace(&format!("{}-", state), &format!("{}-", s));
-        states.push(s);
-    }
-
-    for sym in m2.1 {
-        if !syms.contains(&sym) {
-            syms.push(sym);
-        }
-    }
-    (table, init_state)
-}
-
 fn write_to_file<P: AsRef<Path>>(
     path: P,
-    states: Vec<String>,
+    mut states: Vec<String>,
     syms: Vec<String>,
-    init_state: String,
-    table: String,
+    mut init_state: String,
+    mut table: String,
 ) {
     let mut out = File::create(&path)
         .expect("Failed when creating file for machine.");
+    table = table.trim_start().trim_end().to_owned();
+    table = format!("\n{}\n", table);
+    let re = Regex::new(r"[^\s]*HALT").unwrap();
+    table = re.replace_all(&table, "HALT").to_string();
+
+    for (i, state) in states.iter_mut().enumerate() {
+        let re = get_state_regex(state);
+        // All state names are enumerated as `q{index}`
+        let new_state = format!("q{}", i);
+        table = re.replace_all(&table, |c: &Captures| {
+            format!("{}{}{}", &c[1], new_state, &c[2])
+        }).to_string();
+        if init_state.eq(state) {
+            init_state = new_state.to_owned();
+        }
+        *state = new_state;
+    }
 
     write!(out, "states {}\n", states.join(" ")).unwrap();
     write!(out, "syms {}\n", syms.join(" ")).unwrap();
     write!(out, "initstate {}\n", init_state).unwrap();
-    write!(out, "finalstates HALT\n").unwrap();
-    write!(out, "table\n{}", table).unwrap();
+    write!(out, "table{}", table).unwrap();
 
     println!("Wrote machine to '{}'.", path.as_ref().to_str().unwrap());
 }
@@ -481,77 +434,84 @@ fn write_to_file<P: AsRef<Path>>(
 /// Returns tokens in the order:
 /// - states
 /// - symbols
-/// - final states
 /// - initial state
 /// - table
 fn extract_tokens<P: AsRef<Path>>(path: P) -> (
     Vec<String>,
     Vec<String>,
-    HashSet<String, Hash128>,
     String,
     String,
 ) {
-    let mut machine = String::new();
+    let mut text = String::new();
     File::open(&path)
         .expect(&format!("Failed when opening file at '{}'.", 
-        path.as_ref().to_str().expect("Failed to parse path as string."))
-        ).read_to_string(&mut machine)
+        path.as_ref().to_str().expect("Failed to parse path as string.")))
+        .read_to_string(&mut text)
         .expect("Failed when reading file to string.");
 
-    let mut machine = machine.lines();
+    let mut prefix = String::from("");
+    let mut rng = rand::thread_rng();
+    for _ in 0..16 {
+        prefix.push_str(&rng.gen_range(0..10).to_string());
+    }
+    
+    let (commands, mut table) = if let Some((cmds, tbl)) = text.split_once("table") {
+        // Panics if there are commands defined after the `table`-command
+        if tbl.contains("states")
+            || tbl.contains("syms")
+            || tbl.contains("initstate")
+            || tbl.contains("finalstates") 
+        {
+            panic!("All states and symbols must be defined before the 'table'-command.");
+        }
+        (cmds.to_owned(), format!("\n{}\n", tbl.trim_start().trim_end()))
+    } else {
+        panic!("Transition table was not defined!");
+    };
 
     let mut states = Vec::new();
     let mut syms = Vec::new();
     let mut initial_state = String::new();
-    let mut final_states = HashSet::with_hasher(Hash128);
 
-    for line in &mut machine {
-        let line = if let Some(split) = line.split_once("#") {
-            split.0
+    for line in commands.lines() {
+        // Filters out code comments
+        let line = if let Some((l, _)) = line.split_once("#") {
+            l
         } else {
             line
         };
         let mut tokens = line.split_whitespace();
         match tokens.next() {
             Some("states") => {
+                // All state names are prepended with the prefix to avoid clashes
                 for token in tokens {
-                    states.push(token.to_owned())
+                    let new_name = format!("{}::{}", prefix, token);
+                    let re = get_state_regex(token);
+                    // Here the state names in the table are changed
+                    table = re.replace_all(&table, |c: &Captures| {
+                        format!("{}{}{}", &c[1], new_name, &c[2])
+                    }).to_string();
+                    states.push(new_name);
                 }
             },
             Some("syms") => {
+                // Syms are pushed 'as is'
                 for token in tokens {
                     syms.push(token.to_owned());
                 }
             },
             Some("initstate") => {
-                initial_state.push_str(&tokens.next().unwrap());
+                let state = tokens.next()
+                    .expect("Machine must have an initstate.");
+                initial_state = format!("{}::{}", prefix, state);
             }
-            Some("finalstates") => {
-                for token in tokens {
-                    final_states.insert(token.to_owned());
-                }
-            },
-            Some("table") => {
-                break;
-            },
             _ => {},
         }
     }
 
-    let mut table = String::new();
-
-    for line in machine {
-        let line = if let Some(split) = line.split_once("#") {
-            split.0
-        } else {
-            line
-        };
-        table.push_str(&format!("{}\n", line));
-    }
-
-    (states, syms, final_states, initial_state, table.trim_end().to_owned())
+    (states, syms, initial_state, table.trim_end().trim_start().to_owned())
 }
 
-// pub fn clean_machine<P: AsRef<Path>>(filepath: P, output_path: P) {
-//     todo!();
-// }
+fn get_state_regex(state: &str) -> Regex {
+    Regex::new(&format!("{}{}{}", STATE_DELIMITER, state, STATE_DELIMITER)).unwrap()
+}

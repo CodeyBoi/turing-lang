@@ -1,0 +1,7 @@
+states q0 q1 q2
+syms 
+initstate q0
+table
+q0 * q1 . R
+q1 * q2 . R
+q2 * HALT . R

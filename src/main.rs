@@ -23,11 +23,14 @@ fn main() {
         }
         "chain" => {
             if args.len() < 5 {
-                eprintln!("Expected 3 filepaths, but found {}.", args.len() - 2);
+                eprintln!("Expected at least 3 filepaths, but found {}.", args.len() - 2);
                 return;
             }
-            let (m1, m2, out) = (args[2].as_str(), args[3].as_str(), args[4].as_str());
-            turing::chain(m1, m2, out);
+            let machine= args[2].as_str();
+            let machines = &args[3..args.len() - 1];
+            let output = args.last().unwrap();
+
+            turing::chain(machine, machines, output);
         }
         "branch" => {
             if args.len() < 6 {

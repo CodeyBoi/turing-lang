@@ -1,7 +1,6 @@
-states a right::a
+states q0 q1
 syms 
-initstate a
-finalstates HALT
+initstate q0
 table
-a * right::a . R
-right::a * HALT . R
+q0 * q1 . R
+q1 * HALT . R

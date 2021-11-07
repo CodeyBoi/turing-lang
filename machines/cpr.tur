@@ -1,0 +1,23 @@
+states q0 q1 q2 q3 q4 q5 q6 q7 q8 q9 q10
+syms _ 0 1 D & | ! ^ "
+initstate q0
+table
+q0 _ q1 . L
+q1 * q10 _ R
+q0 0 q2 . L
+q2 * q10 0 R
+q0 1 q3 . L
+q3 * q10 1 R
+q0 D q4 . L
+q4 * q10 D R
+q0 & q5 . L
+q5 * q10 & R
+q0 | q6 . L
+q6 * q10 | R
+q0 ! q7 . L
+q7 * q10 ! R
+q0 ^ q8 . L
+q8 * q10 ^ R
+q0 " q9 . L
+q9 * q10 " R
+q10 * HALT . R

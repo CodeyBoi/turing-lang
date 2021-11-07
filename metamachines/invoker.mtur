@@ -1,2 +1,7 @@
-name invoker
-path ../machines/invoker.tur
+turing chain copy.tur right.tur cpr.tur
+turing loop cpr.tur '0 1 & D | ! " ( )' shift.tur
+
+turing chain find_nested_parenthesis.tur next_op.tur invoker.tur
+turing branch invoker.tur '& D | ! _' 'and.tur nand.tur or.tur not.tur noop.tur' invoker.tur
+
+turing chain invoker.tur right.tur right.tur right.tur shift.tur invoker.tur

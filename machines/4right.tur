@@ -1,0 +1,9 @@
+states a b c d
+syms 
+initstate a
+finalstates HALT
+table
+a * b . R
+b * c . R
+c * d . R
+d * HALT . R

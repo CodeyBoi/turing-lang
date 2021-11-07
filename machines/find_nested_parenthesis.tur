@@ -1,11 +1,11 @@
 # assumes we start at the far right
 # halts to the left of the most nested end parenthesis
 states find_start find_end
-syms 0 1 ( ) 
+syms 0 1 ( ) "
 initstate find_start 
 finalstates HALT 
 table
-find_start ( find_end _ R 
+find_start ( find_end " R 
 find_start * . . L 
-find_end ) HALT _ L 
+find_end ) HALT " L 
 find_end * . . R 
